@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"fmt"
 	"monkey/ast"
 	"monkey/code"
 	"monkey/object"
@@ -44,6 +45,11 @@ func (c *Compiler) Compile(node ast.Node) error {
 		if err != nil {
 			return err
 		}
+	case *ast.IntegerLiteral:
+		integer := &object.Integer{
+			Value: node.Value,
+		}
+		c.emit(code.OpConstant, c.addConstant(integer))
 	case *ast.InfixExpression:
 		err := c.Compile(node.Left)
 		if err != nil {
@@ -53,11 +59,12 @@ func (c *Compiler) Compile(node ast.Node) error {
 		if err != nil {
 			return err
 		}
-	case *ast.IntegerLiteral:
-		integer := &object.Integer{
-			Value: node.Value,
+		switch node.Operator {
+		case "+":
+			c.emit(code.OpAdd)
+		default:
+			return fmt.Errorf("unknown operator %s", node.Operator)
 		}
-		c.emit(code.OpConstant, c.addConstant(integer))
 	}
 
 	return nil

@@ -45,6 +45,15 @@ func (vm *VM) Run() error {
 			if err != nil {
 				return err
 			}
+		case code.OpAdd:
+			right := vm.pop()
+			left := vm.pop()
+			rightValue := right.(*object.Integer).Value
+			leftValue := left.(*object.Integer).Value
+
+			result := leftValue + rightValue
+			resultObject := &object.Integer{Value: result}
+			vm.push(resultObject)
 		}
 	}
 	return nil
@@ -57,4 +66,11 @@ func (vm *VM) push(o object.Object) error {
 	vm.stack[vm.sp] = o
 	vm.sp++
 	return nil
+}
+
+func (vm *VM) pop() object.Object {
+	currentStackObjectPointer := vm.sp - 1
+	currentStackObject := vm.stack[currentStackObjectPointer]
+	vm.sp-- // decrement stack pointer
+	return currentStackObject
 }
