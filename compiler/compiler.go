@@ -45,6 +45,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		if err != nil {
 			return err
 		}
+		c.emit(code.OpPop)
 	case *ast.IntegerLiteral:
 		integer := &object.Integer{
 			Value: node.Value,
@@ -64,6 +65,18 @@ func (c *Compiler) Compile(node ast.Node) error {
 			c.emit(code.OpAdd)
 		default:
 			return fmt.Errorf("unknown operator %s", node.Operator)
+		case "-":
+			c.emit(code.OpSub)
+		case "*":
+			c.emit(code.OpMul)
+		case "/":
+			c.emit(code.OpDiv)
+		}
+	case *ast.Boolean:
+		if node.Value {
+			c.emit(code.OpTrue)
+		} else {
+			c.emit(code.OpFalse)
 		}
 	}
 
