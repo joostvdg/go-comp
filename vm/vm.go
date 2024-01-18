@@ -34,7 +34,7 @@ func (vm *VM) LastPoppedStackElement() object.Object {
 
 func (vm *VM) Run() error {
 	for ip := 0; ip < len(vm.instructions); ip++ {
-		op := code.Opcode(vm.instructions[ip])
+		op := code.OpCode(vm.instructions[ip])
 
 		switch op {
 		case code.OpConstant:
@@ -98,7 +98,7 @@ func (vm *VM) pop() object.Object {
 	return currentStackObject
 }
 
-func (vm *VM) executeBinaryOperation(op code.Opcode) error {
+func (vm *VM) executeBinaryOperation(op code.OpCode) error {
 	right := vm.pop()
 	left := vm.pop()
 	rightType := right.Type()
@@ -110,7 +110,7 @@ func (vm *VM) executeBinaryOperation(op code.Opcode) error {
 	return fmt.Errorf("unsupported types for binary operation: %s %s", leftType, rightType)
 }
 
-func (vm *VM) executeBinaryIntegerOperation(op code.Opcode, left, right object.Object) error {
+func (vm *VM) executeBinaryIntegerOperation(op code.OpCode, left, right object.Object) error {
 	var result int64
 	leftValue := left.(*object.Integer).Value
 	rightValue := right.(*object.Integer).Value
@@ -130,7 +130,7 @@ func (vm *VM) executeBinaryIntegerOperation(op code.Opcode, left, right object.O
 	return vm.push(&object.Integer{Value: result})
 }
 
-func (vm *VM) executeComparison(op code.Opcode) error {
+func (vm *VM) executeComparison(op code.OpCode) error {
 	right := vm.pop()
 	left := vm.pop()
 	rightType := right.Type()
@@ -149,7 +149,7 @@ func (vm *VM) executeComparison(op code.Opcode) error {
 	}
 }
 
-func (vm *VM) executeIntegerComparison(op code.Opcode, left object.Object, right object.Object) error {
+func (vm *VM) executeIntegerComparison(op code.OpCode, left object.Object, right object.Object) error {
 	leftValue := left.(*object.Integer).Value
 	rightValue := right.(*object.Integer).Value
 

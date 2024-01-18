@@ -46,10 +46,10 @@ func (ins Instructions) fmtInstruction(def *Definition, operands []int) string {
 	return fmt.Sprintf("ERROR: unhandled operandCount for %s\n", def.Name)
 }
 
-type Opcode byte
+type OpCode byte
 
 const (
-	OpConstant Opcode = iota
+	OpConstant OpCode = iota
 	OpAdd
 	OpPop
 
@@ -69,6 +69,8 @@ const (
 	OpGreaterThan
 	OpMinus
 	OpBang
+	OpJumpNotTruthy
+	OpJump
 )
 
 type Definition struct {
@@ -76,31 +78,33 @@ type Definition struct {
 	OperandWidths []int
 }
 
-var definitions = map[Opcode]*Definition{
-	OpConstant:    {"OpConstant", []int{2}},
-	OpAdd:         {"OpAdd", []int{}},
-	OpPop:         {"OpPop", []int{}},
-	OpSub:         {"OpSub", []int{}},
-	OpMul:         {"OpMul", []int{}},
-	OpDiv:         {"OpDiv", []int{}},
-	OpTrue:        {"OpTrue", []int{}},
-	OpFalse:       {"OpFalse", []int{}},
-	OpEqual:       {"OpEqual", []int{}},
-	OpNotEqual:    {"OpNotEqual", []int{}},
-	OpGreaterThan: {"OpGreaterThan", []int{}},
-	OpMinus:       {"OpMinus", []int{}},
-	OpBang:        {"OpBang", []int{}},
+var definitions = map[OpCode]*Definition{
+	OpConstant:      {"OpConstant", []int{2}},
+	OpAdd:           {"OpAdd", []int{}},
+	OpPop:           {"OpPop", []int{}},
+	OpSub:           {"OpSub", []int{}},
+	OpMul:           {"OpMul", []int{}},
+	OpDiv:           {"OpDiv", []int{}},
+	OpTrue:          {"OpTrue", []int{}},
+	OpFalse:         {"OpFalse", []int{}},
+	OpEqual:         {"OpEqual", []int{}},
+	OpNotEqual:      {"OpNotEqual", []int{}},
+	OpGreaterThan:   {"OpGreaterThan", []int{}},
+	OpMinus:         {"OpMinus", []int{}},
+	OpBang:          {"OpBang", []int{}},
+	OpJumpNotTruthy: {"OpJumpNotTruthy", []int{2}},
+	OpJump:          {"OpJump", []int{2}},
 }
 
 func Lookup(op byte) (*Definition, error) {
-	def, ok := definitions[Opcode(op)]
+	def, ok := definitions[OpCode(op)]
 	if !ok {
 		return nil, fmt.Errorf("opcode %d undefined", op)
 	}
 	return def, nil
 }
 
-func Make(op Opcode, operands ...int) []byte {
+func Make(op OpCode, operands ...int) []byte {
 	def, ok := definitions[op]
 
 	if !ok {
