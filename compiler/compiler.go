@@ -18,21 +18,33 @@ type EmittedInstruction struct {
 	Position int
 }
 
-type Compiler struct {
+type CompilationScope struct {
 	instructions    code.Instructions
-	constants       []object.Object
 	lastInstruction EmittedInstruction
 	prevInstruction EmittedInstruction
-	symbolTable     *SymbolTable
+}
+
+type Compiler struct {
+	instructions code.Instructions
+	constants    []object.Object
+	symbolTable  *SymbolTable
+	scopes       []CompilationScope
+	scopeIndex   int
 }
 
 func New() *Compiler {
-	return &Compiler{
+	mainScope := CompilationScope{
 		instructions:    code.Instructions{},
-		constants:       []object.Object{},
 		lastInstruction: EmittedInstruction{},
 		prevInstruction: EmittedInstruction{},
-		symbolTable:     NewSymbolTable(),
+	}
+
+	return &Compiler{
+		instructions: code.Instructions{},
+		constants:    []object.Object{},
+		symbolTable:  NewSymbolTable(),
+		scopes:       []CompilationScope{mainScope},
+		scopeIndex:   0,
 	}
 }
 
@@ -45,7 +57,7 @@ func NewWithState(symbolTable *SymbolTable, constants []object.Object) *Compiler
 
 func (c *Compiler) Bytecode() *Bytecode {
 	return &Bytecode{
-		Instructions: c.instructions,
+		Instructions: c.currentInstructions(),
 		Constants:    c.constants,
 	}
 }
@@ -150,7 +162,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 		}
 
 		jumpPosition := c.emit(code.OpJump, 9999)
-		afterConsequencePosition := len(c.instructions)
+		afterConsequencePosition := len(c.currentInstructions())
 		c.changeOperand(jumpNotTruthyPosition, afterConsequencePosition)
 
 		if node.Alternative == nil {
@@ -166,7 +178,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 			}
 		}
 
-		afterAlternativePosition := len(c.instructions)
+		afterAlternativePosition := len(c.currentInstructions())
 		c.changeOperand(jumpPosition, afterAlternativePosition)
 
 	case *ast.BlockStatement:
@@ -237,18 +249,39 @@ func (c *Compiler) Compile(node ast.Node) error {
 			return err
 		}
 		c.emit(code.OpIndex)
+	case *ast.FunctionLiteral:
+		c.enterScope()
+		err := c.Compile(node.Body)
+		if err != nil {
+			return err
+		}
 
+		instructionsFromScopeEnding := c.leaveScope()
+		compiledFn := &object.CompiledFunction{
+			Instructions: instructionsFromScopeEnding,
+		}
+		c.emit(code.OpConstant, c.addConstant(compiledFn))
 	}
 	return nil
 }
 
+func (c *Compiler) currentInstructions() code.Instructions {
+	return c.scopes[c.scopeIndex].instructions
+}
+
 func (c *Compiler) lastInstructionIsPop() bool {
-	return c.lastInstruction.Opcode == code.OpPop
+	return c.scopes[c.scopeIndex].lastInstruction.Opcode == code.OpPop
 }
 
 func (c *Compiler) removeLastPop() {
-	c.instructions = c.instructions[:c.lastInstruction.Position]
-	c.lastInstruction = c.prevInstruction
+	last := c.scopes[c.scopeIndex].lastInstruction
+	previous := c.scopes[c.scopeIndex].prevInstruction
+
+	oldInstructions := c.currentInstructions()
+	newInstructions := oldInstructions[:last.Position] // remove the last Pop instruction
+
+	c.scopes[c.scopeIndex].instructions = newInstructions
+	c.scopes[c.scopeIndex].lastInstruction = previous
 }
 
 func (c *Compiler) addConstant(obj object.Object) int {
@@ -257,13 +290,15 @@ func (c *Compiler) addConstant(obj object.Object) int {
 }
 
 func (c *Compiler) replaceInstruction(position int, newInstruction []byte) {
+	instructions := c.currentInstructions()
+
 	for i := 0; i < len(newInstruction); i++ {
-		c.instructions[position+i] = newInstruction[i]
+		instructions[position+i] = newInstruction[i]
 	}
 }
 
 func (c *Compiler) changeOperand(opPosition int, operand int) {
-	op := code.OpCode(c.instructions[opPosition])
+	op := code.OpCode(c.currentInstructions()[opPosition])
 	newInstruction := code.Make(op, operand)
 	c.replaceInstruction(opPosition, newInstruction)
 }
@@ -276,14 +311,35 @@ func (c *Compiler) emit(op code.OpCode, operands ...int) int {
 }
 
 func (c *Compiler) addInstruction(instruction []byte) int {
-	position := len(c.instructions)
-	c.instructions = append(c.instructions, instruction...)
-	return position
+	positionNewInstruction := len(c.currentInstructions())
+	updatedInstructions := append(c.currentInstructions(), instruction...)
+	c.scopes[c.scopeIndex].instructions = updatedInstructions
+	return positionNewInstruction
 }
 
 func (c *Compiler) setLastInstruction(op code.OpCode, position int) {
-	previous := c.lastInstruction
+	previous := c.scopes[c.scopeIndex].lastInstruction
 	last := EmittedInstruction{Opcode: op, Position: position}
-	c.prevInstruction = previous
-	c.lastInstruction = last
+	c.scopes[c.scopeIndex].prevInstruction = previous
+	c.scopes[c.scopeIndex].lastInstruction = last
+}
+
+func (c *Compiler) enterScope() {
+	scope := CompilationScope{
+		instructions:    code.Instructions{},
+		lastInstruction: EmittedInstruction{},
+		prevInstruction: EmittedInstruction{},
+	}
+	c.scopes = append(c.scopes, scope)
+	c.scopeIndex++
+}
+
+func (c *Compiler) leaveScope() code.Instructions {
+	instruction := c.currentInstructions()
+
+	currentScopeLength := len(c.scopes)
+	newScopeLength := currentScopeLength - 1 // remove the last scope
+	c.scopes = c.scopes[:newScopeLength]     // everything from start to newScopeLength
+	c.scopeIndex--                           // decrement the scopeIndex
+	return instruction
 }
