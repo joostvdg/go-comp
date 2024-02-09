@@ -604,7 +604,9 @@ func TestCompilerScopes(t *testing.T) {
 		t.Errorf("scopeIndex wrong. got=%d, want=%d", compiler.scopeIndex, 0)
 	}
 
+	globalSymbolTable := compiler.symbolTable
 	compiler.emit(code.OpMul)
+
 	compiler.enterScope()
 	if compiler.scopeIndex != 1 {
 		t.Errorf("scopeIndex wrong. got=%d, want=%d", compiler.scopeIndex, 1)
@@ -620,9 +622,20 @@ func TestCompilerScopes(t *testing.T) {
 		t.Errorf("lastInstruction.Opcode wrong. got=%d, want=%d", last.Opcode, code.OpSub)
 	}
 
+	if compiler.symbolTable.Outer != globalSymbolTable {
+		t.Errorf("compiler did not enclose symbol table")
+	}
+
 	compiler.leaveScope()
 	if compiler.scopeIndex != 0 {
 		t.Errorf("scopeIndex wrong. got=%d, want=%d", compiler.scopeIndex, 0)
+	}
+
+	if compiler.symbolTable != globalSymbolTable {
+		t.Errorf("symbolTable not restored. got=%p, want=%p", compiler.symbolTable, globalSymbolTable)
+	}
+	if compiler.symbolTable.Outer != nil {
+		t.Errorf("compiler did not restore outer symbol table. got=%+v, want=nil", compiler.symbolTable.Outer)
 	}
 
 	compiler.emit(code.OpAdd)
@@ -673,7 +686,7 @@ func TestFunctionCalls(t *testing.T) {
 			},
 			expectedInstructions: []code.Instructions{
 				code.Make(code.OpConstant, 1), // the compiled function
-				code.Make(code.OpCall, 0),
+				code.Make(code.OpCall),
 				code.Make(code.OpPop),
 			},
 		},
@@ -693,10 +706,82 @@ func TestFunctionCalls(t *testing.T) {
 				code.Make(code.OpConstant, 1), // the compiled function
 				code.Make(code.OpSetGlobal, 0),
 				code.Make(code.OpGetGlobal, 0),
-				code.Make(code.OpCall, 0),
+				code.Make(code.OpCall),
 				code.Make(code.OpPop),
 			},
 		},
 	}
+	runCompilerTests(t, tests)
+}
+
+func TestLetStatementScopes(t *testing.T) {
+	tests := []compilerTestCase{
+		{
+			input: `
+			let num = 55;
+			fn() { num }
+			`,
+			expectedConstants: []interface{}{
+				55,
+				[]code.Instructions{
+					code.Make(code.OpGetGlobal, 0), // retrieves num
+					code.Make(code.OpReturnValue),  // returns num
+				},
+			},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpConstant, 0),  // the 55
+				code.Make(code.OpSetGlobal, 0), // sets num
+				code.Make(code.OpConstant, 1),  // the compiled function
+				code.Make(code.OpPop),          // pops the result of the function
+			},
+		}, {
+			input: `
+			fn() {
+				let num = 55;
+				num
+			}
+			`,
+			expectedConstants: []interface{}{
+				55,
+				[]code.Instructions{
+					code.Make(code.OpConstant, 0), // the 55
+					code.Make(code.OpSetLocal, 0), // sets num
+					code.Make(code.OpGetLocal, 0), // retrieves num
+					code.Make(code.OpReturnValue), // returns num
+				},
+			},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpConstant, 1), // the compiled function
+				code.Make(code.OpPop),         // pops the result of the function
+			},
+		}, {
+			input: `
+			fn() {
+				let a = 55;
+				let b = 77;
+				a + b
+			}
+			`,
+			expectedConstants: []interface{}{
+				55,
+				77,
+				[]code.Instructions{
+					code.Make(code.OpConstant, 0), // the 55
+					code.Make(code.OpSetLocal, 0), // sets a
+					code.Make(code.OpConstant, 1), // the 77
+					code.Make(code.OpSetLocal, 1), // sets b
+					code.Make(code.OpGetLocal, 0), // retrieves a
+					code.Make(code.OpGetLocal, 1), // retrieves b
+					code.Make(code.OpAdd),         // adds a and b
+					code.Make(code.OpReturnValue), // returns a + b
+				},
+			},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpConstant, 2), // the compiled function
+				code.Make(code.OpPop),         // pops the result of the function
+			},
+		},
+	}
+
 	runCompilerTests(t, tests)
 }

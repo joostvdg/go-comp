@@ -196,24 +196,40 @@ func (vm *VM) Run() error {
 			}
 			frame := NewFrame(fn, vm.sp)
 			vm.pushFrame(frame)
+			vm.sp = frame.basePointer + fn.NumLocals
 
 		case code.OpReturnValue:
 			returnValue := vm.pop()
-
-			vm.popFrame()
-			vm.pop()
+			frame := vm.popFrame()
+			vm.sp = frame.basePointer - 1 // pop the locals and the function
 			err := vm.push(returnValue)
 			if err != nil {
 				return err
 			}
-		case code.OpReturn:
-			vm.popFrame() // pop the current frame
-			vm.pop()      // pop the function
 
-			err := vm.push(Null) // function has no return, so push null
+		case code.OpReturn:
+			frame := vm.popFrame()        // pop the current frame
+			vm.sp = frame.basePointer - 1 // pop the locals and the function
+			err := vm.push(Null)
 			if err != nil {
 				return err
 			}
+
+		case code.OpSetLocal:
+			localIndex := code.ReadUint8(instructions[ip+1:])
+			frame := vm.currentFrame()
+			frame.ip += 1                                          // jump over the operand
+			vm.stack[frame.basePointer+int(localIndex)] = vm.pop() // set the local variable
+		case code.OpGetLocal:
+			localIndex := code.ReadUint8(instructions[ip+1:])
+			frame := vm.currentFrame()
+			frame.ip += 1 // jump over the operand
+
+			err := vm.push(vm.stack[frame.basePointer+int(localIndex)])
+			if err != nil {
+				return err
+			}
+
 		}
 	}
 	return nil
