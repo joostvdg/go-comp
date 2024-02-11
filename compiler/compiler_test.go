@@ -100,6 +100,7 @@ func runCompilerTests(t *testing.T, tests []compilerTestCase) {
 			t.Fatalf("testInstructions failed: %s", err)
 		}
 
+		fmt.Printf("constants: %s\n", bytecode.Constants)
 		err = testConstants(t, tt.expectedConstants, bytecode.Constants)
 		if err != nil {
 			t.Fatalf("testConstants failed: %s", err)
@@ -686,7 +687,7 @@ func TestFunctionCalls(t *testing.T) {
 			},
 			expectedInstructions: []code.Instructions{
 				code.Make(code.OpConstant, 1), // the compiled function
-				code.Make(code.OpCall),
+				code.Make(code.OpCall, 0),
 				code.Make(code.OpPop),
 			},
 		},
@@ -706,7 +707,7 @@ func TestFunctionCalls(t *testing.T) {
 				code.Make(code.OpConstant, 1), // the compiled function
 				code.Make(code.OpSetGlobal, 0),
 				code.Make(code.OpGetGlobal, 0),
-				code.Make(code.OpCall),
+				code.Make(code.OpCall, 0),
 				code.Make(code.OpPop),
 			},
 		},
@@ -783,5 +784,61 @@ func TestLetStatementScopes(t *testing.T) {
 		},
 	}
 
+	runCompilerTests(t, tests)
+}
+
+func TestFunctionCallsWithArguments(t *testing.T) {
+	tests := []compilerTestCase{
+		{
+			input: `
+			let oneArg = fn(a) {a};
+			oneArg(24);
+			`,
+			expectedConstants: []interface{}{
+				[]code.Instructions{
+					code.Make(code.OpGetLocal, 0),
+					code.Make(code.OpReturnValue),
+				},
+				24,
+			},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpConstant, 0),  // the compiled function
+				code.Make(code.OpSetGlobal, 0), // the function as oneArg
+				code.Make(code.OpGetGlobal, 0), // retrieves oneArg
+				code.Make(code.OpConstant, 1),  // the 24
+				code.Make(code.OpCall, 1),      // calls oneArg with 24
+				code.Make(code.OpPop),          // pops the result of the function
+			},
+		},
+		{
+			input: `
+			let manyArg = fn(a, b, c) {a;b;c};
+			manyArg(24, 25, 26);
+			`,
+			expectedConstants: []interface{}{
+				[]code.Instructions{
+					code.Make(code.OpGetLocal, 0),
+					code.Make(code.OpPop),
+					code.Make(code.OpGetLocal, 1),
+					code.Make(code.OpPop),
+					code.Make(code.OpGetLocal, 2),
+					code.Make(code.OpReturnValue),
+				},
+				24,
+				25,
+				26,
+			},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpConstant, 0),  // the compiled function
+				code.Make(code.OpSetGlobal, 0), // the function as manyArg
+				code.Make(code.OpGetGlobal, 0), // retrieves manyArg
+				code.Make(code.OpConstant, 1),  // the 24
+				code.Make(code.OpConstant, 2),  // the 25
+				code.Make(code.OpConstant, 3),  // the 26
+				code.Make(code.OpCall, 3),      // calls manyArg with 24, 25, 26
+				code.Make(code.OpPop),          // pops the result of the function
+			},
+		},
+	}
 	runCompilerTests(t, tests)
 }
