@@ -442,6 +442,10 @@ func (vm *VM) callFunction(numberOfArguments int) error {
 		return fmt.Errorf("calling non-function")
 	}
 
+	if numberOfArguments != fn.NumParameters {
+		return fmt.Errorf("wrong number of arguments. want=%d, got=%d", fn.NumParameters, numberOfArguments)
+	}
+
 	frame := NewFrame(fn, vm.sp-numberOfArguments)
 	vm.pushFrame(frame)
 	vm.sp = frame.basePointer + fn.NumLocals
