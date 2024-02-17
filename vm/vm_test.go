@@ -127,6 +127,18 @@ func testExpectedObject(t *testing.T, expected interface{}, actual object.Object
 			t.Errorf("object is not Null. got=%T (%+v)",
 				actual, actual)
 		}
+
+	case *object.Error:
+		errObject, ok := actual.(*object.Error)
+		if !ok {
+			t.Errorf("object is not Error. got=%T (%+v)", actual, actual)
+			return
+		}
+
+		if errObject.Message != expected.Message {
+			t.Errorf("wrong error message. expected=%q, got=%q",
+				expected.Message, errObject.Message)
+		}
 	}
 }
 
@@ -536,4 +548,40 @@ func TestCallingFunctionsWithWrongNumberOfArguments(t *testing.T) {
 			t.Fatalf("wrong error. want=%q, got=%q", tt.expected, err)
 		}
 	}
+}
+
+func TestBuiltinFunctions(t *testing.T) {
+	tests := []vmTestCase{
+		{`len("")`, 0},
+		{`len("four")`, 4},
+		{`len("hello world")`, 11},
+		{
+			`len(1)`,
+			&object.Error{Message: "argument to `len` not supported, got INTEGER"},
+		},
+		{`len([1, 2, 3])`, 3},
+		{`len([])`, 0},
+		{`puts("hello", "world")`, Null},
+		{`first([1, 2, 3])`, 1},
+		{`first([])`, Null},
+		{
+			`first(1)`,
+			&object.Error{Message: "argument to `first` must be ARRAY, got INTEGER"},
+		},
+		{`last([1, 2, 3])`, 3},
+		{`last([])`, Null},
+		{
+			`last(1)`,
+			&object.Error{Message: "argument to `last` must be ARRAY, got INTEGER"},
+		},
+		{`rest([1, 2, 3])`, []int{2, 3}},
+		{`rest([])`, Null},
+		{`push([], 1)`, []int{1}},
+		{
+			`push(1, 1)`,
+			&object.Error{Message: "argument to `push` must be ARRAY, got INTEGER"},
+		},
+	}
+
+	runVMTests(t, tests)
 }

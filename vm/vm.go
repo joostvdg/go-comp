@@ -193,7 +193,7 @@ func (vm *VM) Run() error {
 			numArgs := code.ReadUint8(instructions[ip+1:]) // number of arguments of the function
 			vm.currentFrame().ip += 1                      // jump over the operand (number of arguments of fn)
 
-			err := vm.callFunction(int(numArgs))
+			err := vm.executeCall(int(numArgs))
 			if err != nil {
 				return err
 			}
@@ -230,6 +230,15 @@ func (vm *VM) Run() error {
 				return err
 			}
 
+		case code.OpGetBuiltin:
+			builtinIndex := code.ReadUint8(instructions[ip+1:])
+			vm.currentFrame().ip += 1 // jump over the operand
+			definition := object.Builtins[builtinIndex]
+
+			err := vm.push(definition.Builtin)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -435,13 +444,7 @@ func (vm *VM) executeHashIndex(hash object.Object, index object.Object) error {
 	return vm.push(pair.Value)
 }
 
-func (vm *VM) callFunction(numberOfArguments int) error {
-
-	fn, ok := vm.stack[vm.sp-1-numberOfArguments].(*object.CompiledFunction)
-	if !ok {
-		return fmt.Errorf("calling non-function")
-	}
-
+func (vm *VM) callFunction(fn *object.CompiledFunction, numberOfArguments int) error {
 	if numberOfArguments != fn.NumParameters {
 		return fmt.Errorf("wrong number of arguments. want=%d, got=%d", fn.NumParameters, numberOfArguments)
 	}
@@ -450,6 +453,30 @@ func (vm *VM) callFunction(numberOfArguments int) error {
 	vm.pushFrame(frame)
 	vm.sp = frame.basePointer + fn.NumLocals
 	return nil
+}
+
+func (vm *VM) callBuiltin(builtin *object.Builtin, numArgs int) error {
+	args := vm.stack[vm.sp-numArgs : vm.sp]
+	result := builtin.Fn(args...)
+	vm.sp = vm.sp - numArgs - 1
+	if result != nil {
+		vm.push(result)
+	} else {
+		vm.push(Null)
+	}
+	return nil
+}
+
+func (vm *VM) executeCall(numArgs int) error {
+	callee := vm.stack[vm.sp-1-numArgs]
+	switch callee := callee.(type) {
+	case *object.CompiledFunction:
+		return vm.callFunction(callee, numArgs)
+	case *object.Builtin:
+		return vm.callBuiltin(callee, numArgs)
+	default:
+		return fmt.Errorf("calling non-function and non-built-in")
+	}
 }
 
 func nativeBoolToBooleanObject(input bool) *object.Boolean {
