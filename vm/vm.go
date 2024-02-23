@@ -32,7 +32,8 @@ func New(bytecode *compiler.Bytecode) *VM {
 	mainFn := &object.CompiledFunction{
 		Instructions: bytecode.Instructions,
 	}
-	mainFrame := NewFrame(mainFn, 0)
+	mainClosure := &object.Closure{Fn: mainFn}
+	mainFrame := NewFrame(mainClosure, 0)
 
 	frames := make([]*Frame, MaxFrames)
 	frames[0] = mainFrame
@@ -191,7 +192,7 @@ func (vm *VM) Run() error {
 
 		case code.OpCall:
 			numArgs := code.ReadUint8(instructions[ip+1:]) // number of arguments of the function
-			vm.currentFrame().ip += 1                      // jump over the operand (number of arguments of fn)
+			vm.currentFrame().ip += 1                      // jump over the operand (number of arguments of cl)
 
 			err := vm.executeCall(int(numArgs))
 			if err != nil {
@@ -220,6 +221,7 @@ func (vm *VM) Run() error {
 			frame := vm.currentFrame()
 			frame.ip += 1                                          // jump over the operand
 			vm.stack[frame.basePointer+int(localIndex)] = vm.pop() // set the local variable
+
 		case code.OpGetLocal:
 			localIndex := code.ReadUint8(instructions[ip+1:])
 			frame := vm.currentFrame()
@@ -239,9 +241,29 @@ func (vm *VM) Run() error {
 			if err != nil {
 				return err
 			}
+
+		case code.OpClosure:
+			constIndex := code.ReadUint16(instructions[ip+1:])
+			_ = code.ReadUint8(instructions[ip+3:]) // number of free variables, using 3 as we are reading 2 bytes for the constant index
+			vm.currentFrame().ip += 3               // jump over the operands (index and number of free variables)
+
+			err := vm.pushClosure(int(constIndex))
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+func (vm *VM) pushClosure(constIndex int) error {
+	constant := vm.constants[constIndex]
+	function, ok := constant.(*object.CompiledFunction)
+	if !ok {
+		return fmt.Errorf("not a function: %+v", constant)
+	}
+	closure := &object.Closure{Fn: function}
+	return vm.push(closure)
 }
 
 func (vm *VM) executeIndexExpression(left, index object.Object) error {
@@ -444,14 +466,14 @@ func (vm *VM) executeHashIndex(hash object.Object, index object.Object) error {
 	return vm.push(pair.Value)
 }
 
-func (vm *VM) callFunction(fn *object.CompiledFunction, numberOfArguments int) error {
-	if numberOfArguments != fn.NumParameters {
-		return fmt.Errorf("wrong number of arguments. want=%d, got=%d", fn.NumParameters, numberOfArguments)
+func (vm *VM) callClosure(cl *object.Closure, numArgs int) error {
+	if numArgs != cl.Fn.NumParameters {
+		return fmt.Errorf("wrong number of arguments. want=%d, got=%d", cl.Fn.NumParameters, numArgs)
 	}
 
-	frame := NewFrame(fn, vm.sp-numberOfArguments)
+	frame := NewFrame(cl, vm.sp-numArgs)
 	vm.pushFrame(frame)
-	vm.sp = frame.basePointer + fn.NumLocals
+	vm.sp = frame.basePointer + cl.Fn.NumLocals
 	return nil
 }
 
@@ -470,8 +492,8 @@ func (vm *VM) callBuiltin(builtin *object.Builtin, numArgs int) error {
 func (vm *VM) executeCall(numArgs int) error {
 	callee := vm.stack[vm.sp-1-numArgs]
 	switch callee := callee.(type) {
-	case *object.CompiledFunction:
-		return vm.callFunction(callee, numArgs)
+	case *object.Closure:
+		return vm.callClosure(callee, numArgs)
 	case *object.Builtin:
 		return vm.callBuiltin(callee, numArgs)
 	default:
