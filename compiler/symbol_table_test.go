@@ -6,12 +6,12 @@ import (
 
 func TestDefine(t *testing.T) {
 	expected := map[string]Symbol{
-		"a": Symbol{Name: "a", Scope: GlobalScope, Index: 0},
-		"b": Symbol{Name: "b", Scope: GlobalScope, Index: 1},
-		"c": Symbol{Name: "c", Scope: LocalScope, Index: 0},
-		"d": Symbol{Name: "d", Scope: LocalScope, Index: 1},
-		"e": Symbol{Name: "e", Scope: LocalScope, Index: 0},
-		"f": Symbol{Name: "f", Scope: LocalScope, Index: 1},
+		"a": {Name: "a", Scope: GlobalScope, Index: 0},
+		"b": {Name: "b", Scope: GlobalScope, Index: 1},
+		"c": {Name: "c", Scope: LocalScope, Index: 0},
+		"d": {Name: "d", Scope: LocalScope, Index: 1},
+		"e": {Name: "e", Scope: LocalScope, Index: 0},
+		"f": {Name: "f", Scope: LocalScope, Index: 1},
 	}
 	global := NewSymbolTable()
 	a := global.Define("a")
@@ -264,10 +264,10 @@ func TestResolveUnresolvableFree(t *testing.T) {
 	secondLocal.Define("f")
 
 	expected := []Symbol{
-		Symbol{Name: "a", Scope: GlobalScope, Index: 0},
-		Symbol{Name: "c", Scope: FreeScope, Index: 0},
-		Symbol{Name: "e", Scope: LocalScope, Index: 0},
-		Symbol{Name: "f", Scope: LocalScope, Index: 1},
+		{Name: "a", Scope: GlobalScope, Index: 0},
+		{Name: "c", Scope: FreeScope, Index: 0},
+		{Name: "e", Scope: LocalScope, Index: 0},
+		{Name: "f", Scope: LocalScope, Index: 1},
 	}
 
 	for _, symbol := range expected {
@@ -290,4 +290,19 @@ func TestResolveUnresolvableFree(t *testing.T) {
 		}
 	}
 
+}
+
+func TestDefineAndResolveFunctionName(t *testing.T) {
+	global := NewSymbolTable()
+	global.DefineFunctionName("a")
+
+	expected := Symbol{Name: "a", Scope: FunctionScope, Index: 0}
+	result, ok := global.Resolve("a")
+	if !ok {
+		t.Fatalf("function name %s not resolvable", expected.Name)
+	}
+
+	if result != expected {
+		t.Errorf("expected %s to resolve to %v, got %v", expected.Name, expected, result)
+	}
 }

@@ -244,10 +244,26 @@ func (vm *VM) Run() error {
 
 		case code.OpClosure:
 			constIndex := code.ReadUint16(instructions[ip+1:])
-			_ = code.ReadUint8(instructions[ip+3:]) // number of free variables, using 3 as we are reading 2 bytes for the constant index
-			vm.currentFrame().ip += 3               // jump over the operands (index and number of free variables)
+			numFree := code.ReadUint8(instructions[ip+3:]) // number of free variables, using 3 as we are reading 2 bytes for the constant index
+			vm.currentFrame().ip += 3                      // jump over the operands (index and number of free variables)
 
-			err := vm.pushClosure(int(constIndex))
+			err := vm.pushClosure(int(constIndex), int(numFree))
+			if err != nil {
+				return err
+			}
+
+		case code.OpGetFree:
+			freeIndex := code.ReadUint8(instructions[ip+1:])
+			vm.currentFrame().ip += 1 // jump over the operand
+			currentClosure := vm.currentFrame().cl
+			err := vm.push(currentClosure.Free[freeIndex])
+			if err != nil {
+				return err
+			}
+
+		case code.OpCurrentClosure:
+			currentClosure := vm.currentFrame().cl
+			err := vm.push(currentClosure)
 			if err != nil {
 				return err
 			}
@@ -256,13 +272,20 @@ func (vm *VM) Run() error {
 	return nil
 }
 
-func (vm *VM) pushClosure(constIndex int) error {
+func (vm *VM) pushClosure(constIndex int, numberOfFreeSymbols int) error {
 	constant := vm.constants[constIndex]
 	function, ok := constant.(*object.CompiledFunction)
 	if !ok {
 		return fmt.Errorf("not a function: %+v", constant)
 	}
-	closure := &object.Closure{Fn: function}
+
+	freeSymbols := make([]object.Object, numberOfFreeSymbols)
+	for i := 0; i < numberOfFreeSymbols; i++ {
+		freeSymbols[i] = vm.stack[vm.sp-(numberOfFreeSymbols+i)]
+	}
+	vm.sp = vm.sp - numberOfFreeSymbols
+
+	closure := &object.Closure{Fn: function, Free: freeSymbols}
 	return vm.push(closure)
 }
 

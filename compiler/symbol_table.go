@@ -1,5 +1,7 @@
 package compiler
 
+import "testing"
+
 type SymbolScope string
 
 const (
@@ -8,6 +10,8 @@ const (
 
 	BuiltinScope SymbolScope = "BUILTIN"
 	FreeScope    SymbolScope = "FREE"
+
+	FunctionScope SymbolScope = "FUNCTION"
 )
 
 type Symbol struct {
@@ -81,5 +85,27 @@ func (s *SymbolTable) defineFree(original Symbol) Symbol {
 		Scope: FreeScope,
 	}
 	s.store[original.Name] = symbol
+	return symbol
+}
+
+func TestShadowingFunctionName(t *testing.T) {
+	global := NewSymbolTable()
+	global.DefineFunctionName("a")
+	global.Define("a")
+
+	expected := Symbol{Name: "a", Scope: GlobalScope, Index: 0}
+	result, ok := global.Resolve("a")
+	if !ok {
+		t.Fatalf("function name %s not resolvable", expected.Name)
+	}
+
+	if result != expected {
+		t.Errorf("expected %s to resolve to %v, got %v", expected.Name, expected, result)
+	}
+}
+
+func (s *SymbolTable) DefineFunctionName(name string) Symbol {
+	symbol := Symbol{Name: name, Index: 0, Scope: FunctionScope}
+	s.store[name] = symbol
 	return symbol
 }
